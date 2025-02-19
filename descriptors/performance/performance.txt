@@ -1,0 +1,24 @@
+
+===== Descriptor Computation Summary =====
+0) keypoints\keypoints_oct3_sub4_thresh1.json -> 6888 descriptors | Time: 12.4568 s
+1) keypoints\keypoints_oct3_sub4_thresh10.json -> 1534 descriptors | Time: 2.7510 s
+2) keypoints\keypoints_oct3_sub4_thresh3.json -> 4346 descriptors | Time: 8.3170 s
+3) keypoints\keypoints_oct3_sub4_thresh5.json -> 3193 descriptors | Time: 5.9822 s
+4) keypoints\keypoints_oct3_sub4_thresh7.json -> 2355 descriptors | Time: 4.4333 s
+5) keypoints\keypoints_oct4_sub4_thresh1.json -> 7216 descriptors | Time: 38.7036 s
+6) keypoints\keypoints_oct4_sub4_thresh10.json -> 1545 descriptors | Time: 3.7761 s
+7) keypoints\keypoints_oct4_sub4_thresh3.json -> 4546 descriptors | Time: 22.7663 s
+8) keypoints\keypoints_oct4_sub4_thresh5.json -> 3303 descriptors | Time: 14.1166 s
+9) keypoints\keypoints_oct4_sub4_thresh7.json -> 2401 descriptors | Time: 8.3691 s
+10) keypoints\keypoints_oct4_sub5_thresh1.json -> 7226 descriptors | Time: 51.6645 s
+11) keypoints\keypoints_oct4_sub5_thresh10.json -> 1551 descriptors | Time: 5.3973 s
+12) keypoints\keypoints_oct4_sub5_thresh3.json -> 4555 descriptors | Time: 31.6519 s
+13) keypoints\keypoints_oct4_sub5_thresh5.json -> 3314 descriptors | Time: 19.3046 s
+14) keypoints\keypoints_oct4_sub5_thresh7.json -> 2411 descriptors | Time: 11.6587 s
+15) keypoints\keypoints_oct5_sub5_thresh1.json -> 7357 descriptors | Time: 96.5070 s
+16) keypoints\keypoints_oct5_sub5_thresh10.json -> 1556 descriptors | Time: 6.4909 s
+17) keypoints\keypoints_oct5_sub5_thresh3.json -> 4622 descriptors | Time: 53.2159 s
+18) keypoints\keypoints_oct5_sub5_thresh5.json -> 3346 descriptors | Time: 30.8478 s
+19) keypoints\keypoints_oct5_sub5_thresh7.json -> 2428 descriptors | Time: 17.7444 s
+
+===== Total Descriptor Computation Time: 446.6922 s =====

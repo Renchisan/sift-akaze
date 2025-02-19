@@ -1,9 +1,10 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
+from itertools import product
+import time
+import json
 
-
-def compute_contrast_factor(img, num_bins=300):
+def compute_contrast_factor(img, num_bins=256):
     #Compute the contrast factor based on the gradient of the image.
     smoothed_img = cv2.GaussianBlur(img, (5, 5), sigmaX=1)
     grad_x = cv2.Sobel(smoothed_img, cv2.CV_32F, 1, 0, ksize=3)
@@ -15,27 +16,12 @@ def compute_contrast_factor(img, num_bins=300):
     cumulative_hist = np.cumsum(histogram)
     percentile_index = np.searchsorted(cumulative_hist, 0.7 * cumulative_hist[-1])
     k = (hmax * percentile_index) / num_bins
-    print("compute_contrast_factor")
     return k
 
-def conduction_function(gradient_magnitude, kappa):
-    #Compute the conduction function based on the gradient magnitude.
-    print("conduction function")
-    return 1 / (1 + (gradient_magnitude / kappa) ** 2)
-
 def compute_divergence(grad_x, grad_y, diffusivity):
-    #Compute the divergence of the gradient field modulated by the diffusivity.
-    #Ensure grad_x and grad_y are of type np.float32
-    grad_x = grad_x.astype(np.float32)
-    grad_y = grad_y.astype(np.float32)
-
-    # Ensure diffusivity is the same shape as grad_x and grad_y
-    diffusivity = diffusivity.astype(np.float32)  # Ensure type consistency
-
     # Compute the divergence in the x and y directions
     divergence_x = cv2.Sobel(grad_x * diffusivity, cv2.CV_32F, 1, 0, ksize=3)
     divergence_y = cv2.Sobel(grad_y * diffusivity, cv2.CV_32F, 0, 1, ksize=3)
-    print("compute divergence")
     return divergence_x + divergence_y
 
 def nonlinear_diffusion_filter(img, n_octaves, n_sublevels, sigma_0, time_step, kappa=None):
@@ -48,14 +34,13 @@ def nonlinear_diffusion_filter(img, n_octaves, n_sublevels, sigma_0, time_step, 
         octave_levels = []
         for sublevel in range(n_sublevels):
             sigma_i = sigma_0 * (2 ** (octave + sublevel / n_sublevels))
-            time_t = 1 / (2 * sigma_i ** 2)
             # Compute gradients after image update
-            grad_x = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3)
-            grad_y = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
+            grad_x = cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3).astype(np.float32)
+            grad_y = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3).astype(np.float32)
             grad_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-            # Compute the conduction function
-            diffusivity = conduction_function(grad_magnitude, kappa)
-            divergence = compute_divergence(grad_x, grad_y, diffusivity)
+            # Compute the CONDUCTION FUNCTION
+            diffusivity = (np.exp(- (grad_magnitude / kappa) ** 2)).astype(np.float32)
+            divergence = cv2.Laplacian(grad_x * diffusivity + grad_y * diffusivity, cv2.CV_32F)
             # Update the image using the diffusion process
             img += time_step * divergence
             img = np.clip(img, 0, 1)
@@ -64,7 +49,6 @@ def nonlinear_diffusion_filter(img, n_octaves, n_sublevels, sigma_0, time_step, 
         # Downsample the image for the next octave
         if octave < n_octaves - 1:
             img = cv2.pyrDown(img)
-    print("nonlinear diffusion filter")
     return scale_space
 
 def non_maximum_suppression(keypoints, distance_threshold):
@@ -79,7 +63,6 @@ def non_maximum_suppression(keypoints, distance_threshold):
             kp for kp in keypoints
             if np.sqrt((kp[0] - current_kp[0]) ** 2 + (kp[1] - current_kp[1]) ** 2) > distance_threshold
         ]
-    print("nonmaximum suppresion")
     return suppressed_keypoints
 
 def detect_keypoints(scale_space, threshold_factor):
@@ -113,48 +96,57 @@ def detect_keypoints(scale_space, threshold_factor):
                         adjusted_x = int(x * scaling_factor)
                         adjusted_y = int(y * scaling_factor)
                         keypoints.append((adjusted_x, adjusted_y, octave_idx, sublevel_idx, hessian_response[y, x])) # Append custom tuple with extra info
-    print("detect keypoints")
     return non_maximum_suppression(keypoints, distance_threshold=10) # Apply non-maximum suppression to the detected keypoints
 
+
+def save_keypoints(image_path, keypoints):
+    keypoints_data = {
+        "image": image_path,
+        "keypoints": [
+            {
+                "x": int(kp[0]),
+                "y": int(kp[1]),
+                "octave": int(kp[2]),
+                "sublevel": int(kp[3]),
+                "response": float(kp[4])  # Convert float32 to Python float
+            }
+            for kp in keypoints
+        ]
+    }
+
+    with open("keypoints.json", "w") as f:
+        json.dump(keypoints_data, f, indent=4)
+
 if __name__ == "__main__":
+    start_total = time.time()
     image_path = 'reference_images/IMG_comsoc.JPG'  # Replace with your image path
     image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
+    scales = [(3, 4), (3, 5), (4, 4), (4, 5), (5, 4), (5, 5)]
+    thresholds = [3, 5, 7, 10]
+    results = []
+    print("\n===== Running Experiments for All Combinations =====")
+    # Generate all (scale, threshold) combinations
+    for (n_octaves, n_sublevels), threshold in product(scales, thresholds):
+        start_time = time.time()  # Start timing this combination
+        # Step 1: Generate scale space
+        scale_space = nonlinear_diffusion_filter(image, n_octaves=n_octaves, n_sublevels=n_sublevels, sigma_0=10, time_step=0.03, kappa=None)
+        # Step 2: Detect keypoints
+        keypoints = detect_keypoints(scale_space, threshold_factor=threshold)
+        save_keypoints(image_path, keypoints)
 
-    scalespace_experiment = []
-    for n in range(3, 7, 1):
-        scale_space  = nonlinear_diffusion_filter(image, n_octaves=n, n_sublevels=n+1, sigma_0=10, time_step=0.03, kappa=None)
-        scalespace_experiment.append(scale_space)
+        end_time = time.time()  # Stop timing this combination
 
-    #scale_space = nonlinear_diffusion_filter(image, n_octaves=3, n_sublevels=4,  sigma_0=10, time_step=0.03, kappa=None)
-    threshold_experiment = []
-    for ss in scalespace_experiment:
-        for n in range(7,8,2):
-            keypoints = detect_keypoints(ss, threshold_factor=n )
-            threshold_experiment.append(keypoints)
-            print("appended!",  n)
+        computation_time = end_time - start_time
+        results.append((n_octaves, n_sublevels, threshold, len(keypoints), computation_time))
 
-    for index, keypoints in enumerate(threshold_experiment):
-        #keypoints = detect_keypoints(scale_space, threshold_factor=7)
-        print("This in #", index)
-        #for kp in keypoints:
-            #print(f"Keypoint at (x={kp[0]}, y={kp[1]}, octave={kp[2]}, sublevel={kp[3]}, response={kp[4]})")
-        print(f"Detected Keypoints: {len(keypoints)}")
+        print(f"Scale ({n_octaves}, {n_sublevels}) | Threshold {threshold} -> {len(keypoints)} keypoints | Time: {computation_time:.4f} s")
 
-    image_color = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    print("\n===== Experiment Summary =====")
+    for idx, (n_octaves, n_sublevels, threshold, keypoint_count, time_taken) in enumerate(results):
+        print(
+            f"{idx}) Scale ({n_octaves}, {n_sublevels}) | Threshold {threshold} -> {keypoint_count} keypoints | Time: {time_taken:.4f} s")
 
-    sigma_0=10
-    for index, keypoints in enumerate(threshold_experiment):
-        cv_keypoints = [
-            cv2.KeyPoint(x=kp[0], y=kp[1], size=sigma_0 * (2 ** kp[2]) * (2 ** (kp[3] / 4)))
-            for kp in keypoints
-        ]
+    end_total = time.time()
+    print(f"\n===== Total Computation Time: {end_total - start_total:.4f} s =====")
 
-        # Draw the keypoints on the image using drawKeypoints
-        img_with_keypoints = cv2.drawKeypoints(image_color, cv_keypoints, None, color=(0, 255, 0), flags=cv2.DrawMatchesFlags_DRAW_RICH_KEYPOINTS)
-
-        # Display the image with keypoints
-        plt.figure(figsize=(10, 10))
-        plt.imshow(cv2.cvtColor(img_with_keypoints, cv2.COLOR_BGR2RGB))
-        plt.axis('off')  # Hide the axes
-        plt.show()
